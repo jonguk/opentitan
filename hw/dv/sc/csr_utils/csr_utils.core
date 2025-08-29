@@ -1,0 +1,11 @@
+CAPI=2:
+name: lowrisc:dv:sc:csr_utils
+filesets:
+  headers:
+    files:
+      - csr_utils.hpp
+      - csr_seq_lib.hpp
+    file_type: cppSource
+targets:
+  default:
+    filesets: [headers]

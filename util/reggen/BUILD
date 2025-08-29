@@ -285,6 +285,15 @@ py_library(
 )
 
 py_library(
+    name = "gen_systemc",
+    srcs = ["gen_systemc.py"],
+    deps = [
+        ":ip_block",
+        requirement("mako"),
+    ],
+)
+
+py_library(
     name = "gen_tock",
     srcs = ["gen_tock.py"],
     deps = [

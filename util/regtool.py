@@ -8,12 +8,14 @@ r"""Command-line tool to validate and convert register hjson
 import argparse
 import logging as log
 import re
+import os
 import sys
 from pathlib import Path
 
 from reggen import (
     gen_cfg_md, gen_cheader, gen_dv, gen_fpv, gen_md, gen_html, gen_json, gen_rtl,
     gen_rust, gen_sec_cm_testplan, gen_selfdoc, systemrdl_exporter, gen_tock, version,
+    gen_systemc,
 )
 from reggen.ip_block import IpBlock
 
@@ -92,6 +94,9 @@ def main():
     parser.add_argument('--systemrdl',
                         action='store_true',
                         help='Output a SystemRDL description')
+    parser.add_argument('--systemc',
+                        action='store_true',
+                        help='Output SystemC 3.0 + TLM-2.0 register model')
     parser.add_argument('-f',
                         action='store_true',
                         help='Output as FPV CSR rw assertion module')
@@ -176,18 +181,28 @@ def main():
                      ('rust', ('rs', None)), ('tock', ('trs', None)),
                      ('interfaces', ('interfaces', None)),
                      ('systemrdl', ('systemrdl', None)),
+                     ('systemc', ('systemc', 'tlm')),
                      ('doc_html_old', ('doc_html_old', None))]
-    fmt = None
-    dirspec = None
+    selected: list[tuple[str, str | None, str]] = []
     for arg_name, spec in arg_to_format:
         if getattr(args, arg_name):
-            if fmt is not None:
-                log.error('Multiple output formats specified on '
-                          'command line ({} and {}).'.format(fmt, spec[0]))
-                sys.exit(1)
-            fmt, dirspec = spec
-    if fmt is None:
-        fmt = 'hjson'
+            selected.append((spec[0], spec[1], arg_name))
+
+    # Allow a combined generation of RTL + SystemC
+    dual_rtl_systemc = False
+    if len(selected) == 0:
+        fmt, dirspec = 'hjson', None
+    elif len(selected) == 1:
+        fmt, dirspec, _ = selected[0]
+    else:
+        fmts = {s[0] for s in selected}
+        if fmts == { 'rtl', 'systemc' }:
+            dual_rtl_systemc = True
+            fmt, dirspec = 'rtl', 'rtl'
+        else:
+            log.error('Multiple output formats specified on command line: {}.'
+                      .format(', '.join(fmts)))
+            sys.exit(1)
 
     infile = args.input
 
@@ -203,34 +218,35 @@ def main():
         params.append((tokens[0], tokens[1]))
 
     # Define either outfile or outdir (but not both), depending on the output
-    # format.
+    # format. For combined RTL+SystemC, we'll resolve both outdirs later.
     outfile = None
     outdir = None
-    if dirspec is None:
-        if args.outdir is not None:
-            log.error('The {} format expects an output file, '
-                      'not an output directory.'.format(fmt))
-            sys.exit(1)
+    if not dual_rtl_systemc:
+        if dirspec is None:
+            if args.outdir is not None:
+                log.error('The {} format expects an output file, '
+                          'not an output directory.'.format(fmt))
+                sys.exit(1)
 
-        outfile = args.outfile
-    else:
-        if args.outfile is not sys.stdout:
-            log.error('The {} format expects an output directory, '
-                      'not an output file.'.format(fmt))
-            sys.exit(1)
-
-        if args.outdir is not None:
-            outdir = args.outdir
-        elif infile is not sys.stdin:
-            outdir = str(Path(infile.name).parents[1].joinpath(dirspec))
+            outfile = args.outfile
         else:
-            # We're using sys.stdin, so can't infer an output directory name
-            log.error(
-                'The {} format writes to an output directory, which '
-                'cannot be inferred automatically if the input comes '
-                'from stdin. Use --outdir to specify it manually.'.format(
-                    fmt))
-            sys.exit(1)
+            if args.outfile is not sys.stdout:
+                log.error('The {} format expects an output directory, '
+                          'not an output file.'.format(fmt))
+                sys.exit(1)
+
+            if args.outdir is not None:
+                outdir = args.outdir
+            elif infile is not sys.stdin:
+                outdir = str(Path(infile.name).parents[1].joinpath(dirspec))
+            else:
+                # We're using sys.stdin, so can't infer an output directory name
+                log.error(
+                    'The {} format writes to an output directory, which '
+                    'cannot be inferred automatically if the input comes '
+                    'from stdin. Use --outdir to specify it manually.'.format(
+                        fmt))
+                sys.exit(1)
 
     # Extract version stamp from file
     version_stamp = version_file.VersionInformation(args.version_stamp)
@@ -267,6 +283,27 @@ def main():
             gen_json.gen_json(obj, outfile, fmt)
             outfile.write('\n')
     else:
+        if dual_rtl_systemc:
+            # Resolve RTL outdir
+            if args.outdir is not None:
+                outdir_rtl = args.outdir
+            elif infile is not sys.stdin:
+                outdir_rtl = str(Path(infile.name).parents[1].joinpath('rtl'))
+            else:
+                log.error('Cannot infer RTL outdir from stdin. Use --outdir.')
+                sys.exit(1)
+
+            # Resolve SystemC outdir (tlm)
+            if infile is not sys.stdin:
+                outdir_sc = str(Path(infile.name).parents[1].joinpath('tlm'))
+            else:
+                log.error('Cannot infer SystemC outdir from stdin. Use --outdir.')
+                sys.exit(1)
+
+            rc1 = gen_rtl.gen_rtl(obj, outdir_rtl)
+            rc2 = gen_systemc.gen_systemc(obj, outdir_sc)
+            return 0 if (rc1 == 0 and rc2 == 0) else 1
+
         if fmt == 'rtl':
             return gen_rtl.gen_rtl(obj, outdir)
         if fmt == 'sec_cm_testplan':
@@ -275,6 +312,8 @@ def main():
             return gen_dv.gen_dv(obj, args.dv_base_names, outdir)
         if fmt == 'fpv':
             return gen_fpv.gen_fpv(obj, outdir)
+        if fmt == 'systemc':
+            return gen_systemc.gen_systemc(obj, outdir)
         src_lic = None
         src_copy = ''
         found_spdx = None

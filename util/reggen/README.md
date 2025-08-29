@@ -1,6 +1,24 @@
 # Register Tool
 
 The register tool is used to construct register documentation, register RTL and header files.
+
+### SystemC/TLM-2.0 Register Model Generation
+
+The tool can generate a minimal SystemC 3.0 + TLM-2.0 register model for software/DV use. Enable with `--systemc` and specify an output directory with `-t`.
+
+Example:
+
+```console
+$ ./util/regtool.py --systemc -t hw/ip/uart/sc hw/ip/uart/data/uart.hjson
+```
+
+This emits `uart_reg_model.hpp` and `uart_reg_model.cpp` that implement a simple word-aligned TLM target with resettable backing storage for CSRs. You can also combine RTL and SystemC generation in one call:
+
+```console
+$ ./util/regtool.py -r --systemc hw/ip/uart/data/uart.hjson
+```
+
+When no `-t` is given, RTL is written to `../rtl` and SystemC is written to `../sc` relative to the input `.hjson` file.
 It is either used stand-alone or by being invoked as part of Markdown processing.
 
 

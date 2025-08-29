@@ -45,6 +45,11 @@ def main():
                         action='store_true',
                         help="Generate testbench UVM env code")
 
+    parser.add_argument("-sc",
+                        "--gen-sc",
+                        action='store_true',
+                        help="Generate SystemC TLM DV skeleton mirroring UVM env")
+
     parser.add_argument(
         "-c",
         "--is-cip",
@@ -152,6 +157,15 @@ def main():
         gen_env.gen_env(args.name, args.is_cip, args.has_ral,
                         args.has_interrupts, args.has_alerts, args.num_edn,
                         args.env_agents, args.env_outdir, args.vendor)
+
+    if args.gen_sc:
+        from uvmdvgen import gen_sc
+        if not args.env_agents:
+            args.env_agents = []
+        gen_sc.gen_sc(args.name, args.env_outdir, args.vendor,
+                      is_cip=args.is_cip, has_ral=args.has_ral,
+                      has_interrupts=args.has_interrupts, has_alerts=args.has_alerts,
+                      env_agents=args.env_agents)
 
 
 if __name__ == '__main__':
