@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     entropy_src_smoke_test
+relocations:     []
+...

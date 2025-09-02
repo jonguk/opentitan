@@ -1,5 +1,16 @@
 #pragma once
 #include <cstdint>
+
+// Basic bus parameter constants mirroring SV bus_params_pkg
+namespace bus_params_pkg {
+  // Address width (bits)
+  inline constexpr std::uint32_t BUS_AW = 32;
+  // Data width (bits)
+  inline constexpr std::uint32_t BUS_DW = 32;
+  // Data byte width (bytes)
+  inline constexpr std::uint32_t BUS_DBW = BUS_DW / 8;
+}
+
 namespace tlul {
   // Opcodes (align with SV bus_params_pkg)
   enum opcode : uint8_t {

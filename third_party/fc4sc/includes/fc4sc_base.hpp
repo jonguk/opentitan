@@ -35,6 +35,13 @@
 #define FC4SC_BASE_HPP
 
 #include <map>
+#include <type_traits>
+#if __has_include(<version>)
+#include <version>
+#endif
+#if !defined(__cpp_lib_logical_traits)
+namespace std { template<class B> struct __not_ { static constexpr bool value = !B::value; }; }
+#endif
 #include <iostream>
 #include <string>
 #include <exception>
@@ -63,7 +70,7 @@ template<typename forbidden, typename head, typename...tail> struct forbid_type 
     (!std::is_convertible<head, forbidden>::value);
 };
 template<typename forbidden, typename first> struct forbid_type<forbidden, first> :
-  public std::__not_<std::is_convertible<first, forbidden>> {};
+  public std::integral_constant<bool, !std::is_convertible<first, forbidden>::value> {};
 
 /*!
  * \brief Macro to declare constructor for covergroup registration.

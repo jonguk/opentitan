@@ -24,6 +24,14 @@ void uart_reg_top::reset() {
   racl_allow_wr_default_.fill(true);
 }
 
+void uart_reg_top::sw_predict_write(uint32_t addr, uint32_t data) {
+  (void)apply_sw_write(addr, data, 0xFu);
+}
+
+uint32_t uart_reg_top::sw_read(uint32_t addr) {
+  return read_sw(addr);
+}
+
 void uart_reg_top::b_transport(tlm::tlm_generic_payload &trans, sc_core::sc_time &delay) {
   (void)delay;
   const uint64_t addr = trans.get_address();
@@ -31,8 +39,8 @@ void uart_reg_top::b_transport(tlm::tlm_generic_payload &trans, sc_core::sc_time
   const unsigned len = trans.get_data_length();
   const bool is_write = (trans.get_command() == tlm::TLM_WRITE_COMMAND);
 
-  // Word-aligned, full-width accesses are expected.
-  if (len != kWordBytes || (addr % kWordBytes) != 0) {
+  // Allow 1/2/4-byte accesses; require alignment to transfer size
+  if (!((len == 1) || (len == 2) || (len == kWordBytes)) || (addr % len) != 0) {
     trans.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
     return;
   }
@@ -57,13 +65,23 @@ void uart_reg_top::b_transport(tlm::tlm_generic_payload &trans, sc_core::sc_time
     if (is_write) {
       uint32_t w;
       std::memcpy(&w, data, sizeof(uint32_t));
-      if (!apply_sw_write(static_cast<uint32_t>(addr), w)) {
+      // Compose TL-UL byte-enable mask (per-lane) from TLM byte enables
+      uint32_t be_mask = 0xFu;
+      if (auto be_ptr = trans.get_byte_enable_ptr()) {
+        be_mask = 0u;
+        const unsigned bel = trans.get_byte_enable_length();
+        const unsigned n = bel ? bel : len;
+        for (unsigned i = 0; i < n && i < 4; ++i) {
+          if (be_ptr[i] != 0) be_mask |= (1u << i);
+        }
+      }
+      if (!apply_sw_write(static_cast<uint32_t>(addr), w, be_mask)) {
         trans.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
         return;
       }
     } else {
       uint32_t r = read_sw(static_cast<uint32_t>(addr));
-      std::memcpy(data, &r, sizeof(uint32_t));
+      std::memcpy(data, &r, len);
     }
     trans.set_response_status(tlm::TLM_OK_RESPONSE);
     return;
@@ -81,76 +99,97 @@ bool uart_reg_top::check_racl(bool is_write, uint32_t addr) const {
   return true;
 }
 
-bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
+bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata, uint32_t be_mask) {
   const uint32_t index = addr / kWordBytes;
   if (addr < 52) {
     auto &regs = regs_default_;
     uint32_t oldv = regs[index];
     uint32_t newv = oldv;
     bool allow = true;
+    // Expand lane mask (1 bit per byte) to 32-bit byte mask
+    uint32_t byte_mask32 = 0;
+    for (int i = 0; i < 4; ++i) { if ((be_mask >> i) & 0x1u) byte_mask32 |= (0xFFu << (8 * i)); }
     switch (index) {
       case 0: {
         if (!allow) break;
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 2);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 3);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 4);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 5);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 6);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 7);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 8);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
@@ -162,65 +201,83 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 2);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 3);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 4);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 5);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 6);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 7);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 8);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;
@@ -230,68 +287,87 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 2);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 3);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 4);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 5);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 6);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 7);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 8);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
+
         // Writing INTR_TEST should set corresponding bits in INTR_STATE (SV behavior)
-        regs[0] |= (wdata & 511);
+        regs[0] |= (wdata & 511 & byte_mask32);
         regs[index] = newv;
         break;
       }
@@ -300,9 +376,11 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;
@@ -312,65 +390,83 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 2);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 4);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 5);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 6);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 7);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(3) << 8);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(65535) << 16);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;
@@ -380,42 +476,54 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 2);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 3);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 4);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 5);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
@@ -427,7 +535,9 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(255) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
@@ -439,9 +549,11 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(255) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;
@@ -451,30 +563,38 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(7) << 2);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(7) << 5);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;
@@ -484,14 +604,18 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(255) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(255) << 16);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
@@ -503,16 +627,20 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 1);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;
@@ -522,7 +650,9 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(65535) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
           // ignore writes
         }
@@ -534,16 +664,20 @@ bool uart_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(16777215) << 0);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
 
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(1) << 31);
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
         }
         regs[index] = newv;
         break;

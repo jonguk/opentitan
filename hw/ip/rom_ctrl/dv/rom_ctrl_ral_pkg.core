@@ -1,0 +1,14 @@
+CAPI=2:
+filesets:
+  files_dv:
+    depend:
+    - lowrisc:dv:dv_base_reg
+    file_type: systemVerilogSource
+    files:
+    - rom_ctrl_regs_ral_pkg.sv
+    - rom_ctrl_rom_ral_pkg.sv
+name: lowrisc:dv:rom_ctrl_ral_pkg
+targets:
+  default:
+    filesets:
+    - files_dv

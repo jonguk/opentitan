@@ -26,6 +26,14 @@ void ${lblock}_reg_top::reset() {
 % endfor
 }
 
+void ${lblock}_reg_top::sw_predict_write(uint32_t addr, uint32_t data) {
+  (void)apply_sw_write(addr, data, 0xFu);
+}
+
+uint32_t ${lblock}_reg_top::sw_read(uint32_t addr) {
+  return read_sw(addr);
+}
+
 void ${lblock}_reg_top::b_transport(tlm::tlm_generic_payload &trans, sc_core::sc_time &delay) {
   (void)delay;
   const uint64_t addr = trans.get_address();
@@ -33,8 +41,8 @@ void ${lblock}_reg_top::b_transport(tlm::tlm_generic_payload &trans, sc_core::sc
   const unsigned len = trans.get_data_length();
   const bool is_write = (trans.get_command() == tlm::TLM_WRITE_COMMAND);
 
-  // Word-aligned, full-width accesses are expected.
-  if (len != kWordBytes || (addr % kWordBytes) != 0) {
+  // Allow 1/2/4-byte accesses; require alignment to transfer size
+  if (!((len == 1) || (len == 2) || (len == kWordBytes)) || (addr % len) != 0) {
     trans.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
     return;
   }
@@ -60,13 +68,23 @@ void ${lblock}_reg_top::b_transport(tlm::tlm_generic_payload &trans, sc_core::sc
     if (is_write) {
       uint32_t w;
       std::memcpy(&w, data, sizeof(uint32_t));
-      if (!apply_sw_write(static_cast<uint32_t>(addr), w)) {
+      // Compose TL-UL byte-enable mask (per-lane) from TLM byte enables
+      uint32_t be_mask = 0xFu;
+      if (auto be_ptr = trans.get_byte_enable_ptr()) {
+        be_mask = 0u;
+        const unsigned bel = trans.get_byte_enable_length();
+        const unsigned n = bel ? bel : len;
+        for (unsigned i = 0; i < n && i < 4; ++i) {
+          if (be_ptr[i] != 0) be_mask |= (1u << i);
+        }
+      }
+      if (!apply_sw_write(static_cast<uint32_t>(addr), w, be_mask)) {
         trans.set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
         return;
       }
     } else {
       uint32_t r = read_sw(static_cast<uint32_t>(addr));
-      std::memcpy(data, &r, sizeof(uint32_t));
+      std::memcpy(data, &r, len);
     }
     trans.set_response_status(tlm::TLM_OK_RESPONSE);
     return;
@@ -87,7 +105,7 @@ bool ${lblock}_reg_top::check_racl(bool is_write, uint32_t addr) const {
   return true;
 }
 
-bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
+bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata, uint32_t be_mask) {
   const uint32_t index = addr / kWordBytes;
 % for iface_name, rb in block.reg_blocks.items():
   if (addr < ${rb.offset}) {
@@ -95,6 +113,9 @@ bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
     uint32_t oldv = regs[index];
     uint32_t newv = oldv;
     bool allow = true;
+    // Expand lane mask (1 bit per byte) to 32-bit byte mask
+    uint32_t byte_mask32 = 0;
+    for (int i = 0; i < 4; ++i) { if ((be_mask >> i) & 0x1u) byte_mask32 |= (0xFFu << (8 * i)); }
     switch (index) {
 %   for i, r in enumerate(rb.flat_regs):
       case ${i}: {
@@ -110,7 +131,15 @@ bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
           fw = rr.fields[0]
           regwen_width = fw.bits.width()
           regwen_lsb = fw.bits.lsb
-          regwen_true = fw.resval or 1
+          # Ensure numeric literal for C++ emission (avoid 'Trueu')
+          try:
+              rv = fw.resval
+              if rv is None:
+                  regwen_true = 1
+              else:
+                  regwen_true = int(rv) if not isinstance(rv, bool) else (1 if rv else 0)
+          except Exception:
+              regwen_true = 1
           break
 %>
         {
@@ -124,8 +153,9 @@ bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
         {
           auto &phase = shadow_phase_${iface_name or 'default'}_[index];
           auto &stage = shadow_stage_${iface_name or 'default'}_[index];
-          if (phase == 0) { stage = wdata; phase = 1; break; }
-          if (wdata != stage) { phase = 0; break; }
+          uint32_t wmasked = (wdata & byte_mask32);
+          if (phase == 0) { stage = wmasked; phase = 1; break; }
+          if (wmasked != stage) { phase = 0; break; }
           // commit on match; fallthrough to apply transformations using staged raw data
         }
 %       endif
@@ -137,20 +167,22 @@ bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 %>
         {
           constexpr uint32_t mask = (static_cast<uint32_t>(${mask}) << ${lsb});
-          const uint32_t raw = wdata & mask;
+          // Apply byte-enable and clamp to field width; prevent upper-bit artifacts
+          const uint32_t raw = (wdata & byte_mask32) & mask;
+          const uint32_t raw_clamped = raw & mask;
           const uint32_t cur = newv & mask;
 %         if f.swaccess.key == 'rw':
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
 %         elif f.swaccess.key == 'ro':
           // ignore writes
 %         elif f.swaccess.key == 'wo':
-          newv = (newv & ~mask) | raw;
+          newv = (newv & ~mask) | raw_clamped;
 %         elif f.swaccess.key == 'rw1c' or f.swaccess.key == 'r0w1c':
-          newv = newv & ~raw;
+          newv = newv & ~raw_clamped;
 %         elif f.swaccess.key == 'rw1s':
-          newv = newv | raw;
+          newv = newv | raw_clamped;
 %         elif f.swaccess.key == 'rw0c':
-          newv = newv & ~(~raw & mask);
+          newv = newv & ~(~raw_clamped & mask);
 %         elif f.swaccess.key == 'rc':
           // no effect on write; clears on read
 %         else:
@@ -175,7 +207,7 @@ bool ${lblock}_reg_top::apply_sw_write(uint32_t addr, uint32_t wdata) {
 %>
 %         if intr_state_idx is not None:
         // Writing INTR_TEST should set corresponding bits in INTR_STATE (SV behavior)
-        regs[${intr_state_idx}] |= (wdata & ${intr_state_mask});
+        regs[${intr_state_idx}] |= (wdata & ${intr_state_mask} & byte_mask32);
 %         endif
 %       endif
         regs[index] = newv;

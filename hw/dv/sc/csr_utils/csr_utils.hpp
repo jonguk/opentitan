@@ -61,6 +61,7 @@ inline void csr_wr(uint32_t addr, uint32_t data) {
   t.set_data_ptr(buf); tl_bind::b_transport(t, d);
   if (t.get_response_status() == tlm::TLM_OK_RESPONSE) {
     for (auto &fn : tl_bind::observers) { fn(addr, data, true); }
+    uvm::uvm_report_info("CSR_UTIL", (std::string("WR notify @0x") + std::to_string(addr) + " =0x" + std::to_string(data)).c_str(), uvm::UVM_LOW);
   }
   if (csr_log_enabled) {
     std::ostringstream oss; oss << "WR @0x" << std::hex << addr << " = 0x" << data;
@@ -78,6 +79,7 @@ inline uint32_t csr_rd(uint32_t addr) {
   uint32_t v=0; std::memcpy(&v, buf, 4);
   if (t.get_response_status() == tlm::TLM_OK_RESPONSE) {
     for (auto &fn : tl_bind::observers) { fn(addr, v, false); }
+    uvm::uvm_report_info("CSR_UTIL", (std::string("RD notify @0x") + std::to_string(addr) + " ->0x" + std::to_string(v)).c_str(), uvm::UVM_LOW);
   }
   if (csr_log_enabled) {
     std::ostringstream oss; oss << "RD @0x" << std::hex << addr << " -> 0x" << v;
@@ -105,6 +107,20 @@ inline bool csr_spinwait(uint32_t addr, uint32_t mask, uint32_t expected,
                                << " mask=0x" << mask << " exp=0x" << expected;
   uvm::uvm_report_error("CSR_SPINWAIT", oss.str(), uvm::UVM_NONE);
   return false;
+}
+
+// SV dv_utils get_masked_data equivalent: merge write data with mirrored CSR bytes
+// When mask bit is 0, take byte from csr_mirrored; when 1, take from wdata.
+inline uint32_t get_masked_data(uint32_t wdata, uint32_t mask, uint32_t csr_mirrored) {
+  uint32_t merged = wdata;
+  for (unsigned i = 0; i < 4; ++i) {
+    if (((mask >> i) & 0x1u) == 0u) {
+      // clear target byte and insert from mirrored
+      merged &= ~(0xFFu << (i * 8));
+      merged |= ((csr_mirrored >> (i * 8)) & 0xFFu) << (i * 8);
+    }
+  }
+  return merged;
 }
 
 }  // namespace scdv

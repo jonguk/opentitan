@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     edn_bit_bash_test
+relocations:     []
+...

@@ -29,6 +29,10 @@ class uart_reg_top : public sc_core::sc_module {
   // Register reset helper
   void reset();
 
+  // Soft-access helpers for DV: bypass TLM socket to read/predict mirror
+  void sw_predict_write(uint32_t addr, uint32_t data);
+  uint32_t sw_read(uint32_t addr);
+
   // RACL controls (optional; default disabled and all allowed)
   void set_racl_enable(bool enable) { enable_racl_ = enable; }
   void set_racl_error_response(bool enable) { racl_error_rsp_ = enable; }
@@ -403,7 +407,7 @@ class uart_reg_top : public sc_core::sc_module {
 
   // Helpers
   bool check_racl(bool is_write, uint32_t addr) const;
-  bool apply_sw_write(uint32_t addr, uint32_t wdata);
+  bool apply_sw_write(uint32_t addr, uint32_t wdata, uint32_t be_mask);
   uint32_t read_sw(uint32_t addr);
 
   // Exposed bundles, mirroring SV

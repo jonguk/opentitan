@@ -1,0 +1,10 @@
+filesets:
+  files_dv:
+    files:
+      - edn_ral_pkg.hpp
+    file_type: user
+name: lowrisc:dv:edn_ral_pkg
+targets:
+  default:
+    filesets:
+      - files_dv

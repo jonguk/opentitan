@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     hmac_racl_test
+relocations:     []
+...

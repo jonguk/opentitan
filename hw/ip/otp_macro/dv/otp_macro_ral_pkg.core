@@ -1,0 +1,13 @@
+CAPI=2:
+filesets:
+  files_dv:
+    depend:
+    - lowrisc:dv:dv_base_reg
+    file_type: systemVerilogSource
+    files:
+    - otp_macro_prim_ral_pkg.sv
+name: lowrisc:dv:otp_macro_ral_pkg
+targets:
+  default:
+    filesets:
+    - files_dv

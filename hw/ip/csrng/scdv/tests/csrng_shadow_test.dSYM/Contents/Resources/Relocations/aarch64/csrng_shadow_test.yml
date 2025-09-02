@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     csrng_shadow_test
+relocations:     []
+...

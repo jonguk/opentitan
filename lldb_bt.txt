@@ -1,0 +1,2 @@
+(lldb) target create "./uart_csr_rw_test"
+error: 'uart_csr_rw_test' does not exist

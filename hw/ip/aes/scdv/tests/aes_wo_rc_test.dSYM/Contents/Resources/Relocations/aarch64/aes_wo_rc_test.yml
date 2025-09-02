@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     aes_wo_rc_test
+relocations:     []
+...

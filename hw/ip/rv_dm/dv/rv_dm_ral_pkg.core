@@ -1,0 +1,15 @@
+CAPI=2:
+filesets:
+  files_dv:
+    depend:
+    - lowrisc:dv:dv_base_reg
+    file_type: systemVerilogSource
+    files:
+    - rv_dm_regs_ral_pkg.sv
+    - rv_dm_mem_ral_pkg.sv
+    - rv_dm_dbg_ral_pkg.sv
+name: lowrisc:dv:rv_dm_ral_pkg
+targets:
+  default:
+    filesets:
+    - files_dv

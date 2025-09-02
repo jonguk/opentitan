@@ -1,0 +1,16 @@
+<html><head><meta charset="utf-8">
+<title>UART Coverage (Merged fc4sc)</title>
+<style>body{font-family:Arial,Helvetica,sans-serif} table{border-collapse:collapse;margin-bottom:16px} th,td{border:1px solid #ccc;padding:4px 8px;text-align:left} .pct{font-weight:bold} .controls{margin:12px 0} .muted{color:#666} .status-ok{color:#0a0} .status-miss{color:#a00;font-weight:bold} details{margin:10px 0} summary{cursor:pointer;font-weight:bold}</style>
+<script>function toggleRows(){const hideFull=document.getElementById("hideFull").checked;const onlyUncov=document.getElementById("onlyUncov").checked;document.querySelectorAll("tr[data-cp]").forEach(tr=>{const pct=parseFloat(tr.getAttribute("data-cp"));tr.style.display=(hideFull&&pct===100)|| (onlyUncov&&pct>0)?"none":"";});document.querySelectorAll("tr[data-bin]").forEach(tr=>{const hit=parseInt(tr.getAttribute("data-hit"));tr.className= hit===0?"muted":"";});}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head><body>
+<h1>UART Coverage (Merged fc4sc)</h1>
+<p class="pct">Overall (unweighted): 0 / 0 bins (0.0%) &nbsp; | &nbsp; Weighted: 0 / 0 (0.0%)</p>
+<div class="controls"><label><input type="checkbox" id="hideFull" onchange="toggleRows()"> Hide fully covered coverpoints</label> &nbsp; <label><input type="checkbox" id="onlyUncov" onchange="toggleRows()"> Show only uncovered coverpoints</label></div>
+<div style="max-width:400px"><canvas id="chart_overall"></canvas></div>
+</body></html>
+<script>function makePie(id,covered,uncovered,label){const ctx=document.getElementById(id).getContext("2d");new Chart(ctx,{type:"pie",data:{labels:["Covered","Uncovered"],datasets:[{data:[covered,uncovered],backgroundColor:["#2ca02c","#d62728"]}]},options:{plugins:{legend:{position:"bottom"},title:{display:true,text:label}}});}</script>
+<script>
+makePie("chart_overall",0,0,"Overall");
+</script>
+</body></html>

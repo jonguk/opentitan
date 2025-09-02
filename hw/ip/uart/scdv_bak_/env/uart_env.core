@@ -1,0 +1,33 @@
+CAPI=2:
+name: "lowrisc:scdv:uart_env:0.1"
+description: "UART DV UVM-SystemC environment (CIP-style layout)"
+
+filesets:
+  files_scdv_env:
+    files:
+      - uart_env.hpp: {is_include_file: true}
+      - uart_virtual_sequencer.hpp: {is_include_file: true}
+      - uart_env_cfg.hpp: {is_include_file: true}
+      - uart_env_cov.hpp: {is_include_file: true}
+      - uart_scoreboard.hpp: {is_include_file: true}
+    file_type: cHeader
+
+  files_scdv_seq_lib:
+    files:
+      # add seq_lib headers here later
+    file_type: cHeader
+
+  files_scdv_tests:
+    files:
+      - ../tests/main.cpp
+      - ../tests/uart_csr_rw_test.cpp
+    file_type: cppSource
+
+targets:
+  default:
+    filesets:
+      - files_scdv_env
+      - files_scdv_seq_lib
+      - files_scdv_tests
+
+

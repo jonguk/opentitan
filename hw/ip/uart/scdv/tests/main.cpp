@@ -5,11 +5,8 @@
 #include <cstdlib>
 #include <tlm_utils/simple_initiator_socket.h>
 #include "../../../dv/sc/tl_agent/tl_bind.hpp"
+#include "../env/csr_exclude.hpp"
 #include "../../tlm/uart_reg_pkg.hpp"
-#if defined(ENABLE_FC4SC) && defined(FC4SC_READY)
-#include <fc4sc/includes/fc4sc.hpp>
-#include <fc4sc/includes/xml_printer.hpp>
-#endif
 using namespace uvm;
 
 static const char *get_testname_from_argv(int argc, char **argv) {
@@ -91,31 +88,22 @@ int sc_main(int argc, char **argv) {
   tl_bind::set_racl_enable = [&](bool e){ top_i.dut.set_racl_enable(e); };
   tl_bind::set_racl_error_response = [&](bool e){ top_i.dut.set_racl_error_response(e); };
   tl_bind::set_reg_policy = [&](std::size_t idx, bool rd, bool wr){ top_i.dut.set_reg_policy(idx, rd, wr); };
+  tl_bind::set_role_mask = [&](uint32_t m){ top_i.dut.set_role_mask(m); };
+  // Bind RAL hooks to DUT's software model for accurate prediction
+  tl_bind::ral_sw_read = [&](uint32_t addr) -> uint32_t { return top_i.dut.sw_read(addr); };
+  tl_bind::ral_sw_predict_write = [&](uint32_t addr, uint32_t data){ top_i.dut.sw_predict_write(addr, data); };
+  tl_bind::ral_num_bytes = [&](){ return static_cast<uint32_t>(opentitan::uart::uart_reg_top::kRegBytes); };
+  tl_bind::ral_word_bytes = [&](){ return 4u; };
+
+  // Initialize default CSR exclusions derived from HJSON
+  scdv::init_default_exclusions();
 
   apply_uvm_flags(argc, argv);
-#if defined(ENABLE_FC4SC) && defined(FC4SC_READY)
-  try {
-    std::cout << "[FC4SC] pre-run save..." << std::endl;
-    xml_printer::coverage_save("/tmp/fc4sc_cov_prerun.ucis.xml", fc4sc::global::getter());
-  } catch (...) {}
-  // Ensure coverage is saved on process exit regardless of how UVM stops
-  std::atexit([](){
-    try {
-      xml_printer::coverage_save("/tmp/fc4sc_cov.ucis.xml", fc4sc::global::getter());
-      xml_printer::coverage_save("fc4sc_cov.ucis.xml", fc4sc::global::getter());
-      std::cerr << "[FC4SC] atexit coverage saved" << std::endl;
-    } catch (...) {}
-  });
-#endif
-  if (const char *tn = get_testname_from_argv(argc, argv)) { uvm::run_test(tn); } else { uvm::run_test(); }
-  sc_core::sc_start();
-#if defined(ENABLE_FC4SC) && defined(FC4SC_READY)
-  try {
-    std::cout << "[FC4SC] saving UCIS XML..." << std::endl;
-    xml_printer::coverage_save("/tmp/fc4sc_cov.ucis.xml", fc4sc::global::getter());
-    xml_printer::coverage_save("fc4sc_cov.ucis.xml", fc4sc::global::getter());
-    std::cout << "[FC4SC] saved to /tmp/fc4sc_cov.ucis.xml and ./fc4sc_cov.ucis.xml" << std::endl;
-  } catch (...) {}
-#endif
+  if (const char *tn = get_testname_from_argv(argc, argv)) { uvm::run_test(tn); } else {
+    std::string prog = std::string(argv && argv[0] ? argv[0] : "");
+    std::size_t pos = prog.find_last_of('/');
+    if (pos != std::string::npos) prog = prog.substr(pos + 1);
+    if (!prog.empty()) uvm::run_test(prog.c_str()); else uvm::run_test();
+  }
   return 0;
 }

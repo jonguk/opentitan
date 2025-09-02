@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     edn_w1c_test
+relocations:     []
+...
