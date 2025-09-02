@@ -91,3 +91,10 @@ book
 
 # Custom Ruff config overrides
 .ruff.toml
+
+# SCDV / SystemC local artifacts
+.venv/
+build_scdv_tmp/
+hw/ip/*/scdv/tests/coverage_html/
+hw/ip/*/scdv/tests/*.json
+hw/ip/*/scdv/tests/*_test
