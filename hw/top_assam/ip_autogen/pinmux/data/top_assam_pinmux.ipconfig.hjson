@@ -1,0 +1,22 @@
+// Copyright lowRISC contributors (OpenTitan project).
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+{
+  instance_name: top_assam_pinmux
+  param_values:
+  {
+    n_wkup_detect: 1
+    wkup_cnt_width: 8
+    n_mio_pads: 4
+    n_mio_periph_in: 1
+    n_mio_periph_out: 1
+    n_dio_pads: 6
+    n_dio_periph_in: 6
+    n_dio_periph_out: 4
+    enable_usb_wakeup: false
+    enable_strap_sampling: true
+    topname: assam
+    uniquified_modules: {}
+    module_instance_name: pinmux
+  }
+}

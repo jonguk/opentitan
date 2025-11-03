@@ -1,0 +1,41 @@
+CAPI=2:
+# Copyright lowRISC contributors (OpenTitan project).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "lowrisc:top_assam_dv:clkmgr_hint_tb:0.1"
+description: "Assam clkmgr hint clock testbench"
+
+filesets:
+  files_rtl:
+    depend:
+      - lowrisc:assam_ip:clkmgr
+      - lowrisc:ip:tlul
+    files:
+      - clkmgr_hint_tb.sv
+    file_type: systemVerilogSource
+
+targets:
+  sim:
+    default_tool: verilator
+    filesets:
+      - files_rtl
+    toplevel: clkmgr_hint_tb
+    tools:
+      verilator:
+        mode: cc
+        verilator_options:
+          - '--trace'
+          - '--trace-structs'
+          - '--trace-params'
+          - '--trace-max-array 1024'
+          - '-CFLAGS "-std=c++11 -Wall -DVM_TRACE_FST=1 -g"'
+          - '-LDFLAGS "-pthread -lutil"'
+          - "-Wall"
+          - "-Wno-PINCONNECTEMPTY"
+          - "-Wno-ASSIGNDLY"
+          - "-Wno-DECLFILENAME"
+          - "-Wno-UNUSED"
+          - "-Wno-UNOPTFLAT"
+          - "-Wno-BLKANDNBLK"
+          - "-Wno-WIDTHEXPAND"
+          - "-Wno-WIDTHTRUNC"
